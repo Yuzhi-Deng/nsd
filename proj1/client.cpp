@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
   uint64_t avg_delay = 0;
   for (int k = 1; k <= cnt; k++) {
     delay_arr[k] = cal_delay_per_cnt(num);
-	printf("#Count %d: %ld ms\n", k, delay_arr[k]);
+    printf("#Count %d: %ld ms\n", k, delay_arr[k]);
 	avg_delay += delay_arr[k];
   }
 
