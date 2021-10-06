@@ -31,7 +31,7 @@ typedef struct comm {
 }CommObj;
 
 CommObj commobj;
-static int conless = 1;
+static int conless = 0;
 
 static ssize_t snd_data(const void *buf, size_t len) {
   //printf("send %ld\n", ((uint64_t *)buf)[0]);
@@ -103,12 +103,17 @@ int main(int argc, char **argv) {
   init_comm();
   
   /*mearsure the network delay*/ 
-  int cnt = 10, num = 5;
+  int cnt = 10, num = 30;
   uint64_t avg_delay = 0;
   for (int k = 1; k <= cnt; k++) {
     delay_arr[k] = cal_delay_per_cnt(num);
 	printf("#Count %d: %ld ms\n", k, delay_arr[k]);
 	avg_delay += delay_arr[k];
+  }
+
+  if (!conless) {
+    uint64_t ed = 0; 
+	snd_data(&ed, sizeof(ed));
   }
   avg_delay = (avg_delay + 500) / cnt;
   printf("Average Delay: %ld ms\n", avg_delay);
