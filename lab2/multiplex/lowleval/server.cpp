@@ -96,7 +96,7 @@ int main() {
     mk_fdlist(&slist, &readfds);
 	//make_fdlist(&slist, &writefds);
 	//make_fdlist(&slist, &exceptfds);
-	int fdn = select(10, &readfds, NULL, NULL, NULL);
+	int fdn = select(10, &readfds, NULL, NULL, NULL); //the number of the fds of three fd_set should not greater than `nfds - 1`.
 	assert(fdn != -1);
 	if (fdn > 0) printf("select %d\n", fdn);
     
