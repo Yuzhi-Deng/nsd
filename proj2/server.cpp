@@ -12,6 +12,8 @@
 #define SERVER_PORT 0x1234
 #define SERVER_ADDR INADDR_ANY
 
+#define STDIN 0
+
 #define MAXN 64
 typedef struct socket_list {
   int mainsock;
@@ -47,6 +49,7 @@ static void del_list(int s, SockList *list) {
 static void mk_fdlist(SockList *list, fd_set *fd_list) {
 //put the fd watched into the fd_list
   FD_SET(list->mainsock, fd_list);
+  FD_SET(STDIN, fd_list);
   for (int i = 0; i < MAXN; i++) {
     if (list->sock_arr[i] > 0) {
       FD_SET(list->sock_arr[i], fd_list);
@@ -74,8 +77,6 @@ int main() {
   listen(s, 5);
   printf("listening at 0.0.0.0:%u, mainsock = %d\n", SERVER_PORT, s);
 
-  
-
   init_list(&slist);
   slist.mainsock = s;
 
@@ -87,18 +88,30 @@ int main() {
    * the value is indicated by the third parameter; F_GETFD means get the state of the fd;
    * we get the original state and append the O_NONBLOCK to it through `or` operation.*/ 
 
+
+#define is_ready(flag) (flag & 1) 
+#define has_sent(flag) ((flag >> 1) & 1)
+#define set_ready(flag) (flag | 1)
+#define set_sent(flag) (flag | 2)
   char buf[128];
+  char sendbuf[128];
+  int flag = 0;
+  int cur = 0;
 
   for (; ;) {
 	FD_ZERO(&readfds); FD_ZERO(&writefds); FD_ZERO(&exceptfds);
+
     timeout.tv_sec = 1;
     timeout.tv_usec = 0;
+
     mk_fdlist(&slist, &readfds);
-	//make_fdlist(&slist, &writefds);
-	//make_fdlist(&slist, &exceptfds);
-	int fdn = select(10, &readfds, NULL, NULL, &timeout); //the number of the fds of three fd_set should not greater than `nfds - 1`.
+	mk_fdlist(&slist, &writefds);
+	mk_fdlist(&slist, &exceptfds);
+
+	int fdn = select(10, &readfds, &writefds, &exceptfds, &timeout); //the number of the fds of three fd_set should not greater than `nfds - 1`.
 	assert(fdn != -1);
-	if (fdn > 0) printf("select %d\n", fdn);
+	if (fdn == 0) continue;
+	//if (fdn > 0) printf("select %d\n", fdn);
     
 	if (FD_ISSET(slist.mainsock, &readfds)) {
       socklen_t len = sizeof(cltaddr);	
@@ -109,9 +122,20 @@ int main() {
 	  ins_list(newsock, &slist);
 	}
 
+	if (FD_ISSET(STDIN, &readfds)) {
+	  ssize_t rdn = read(STDIN, &sendbuf[cur], sizeof(sendbuf) - 1 - cur);
+	  cur += rdn;
+	  if (sendbuf[cur - 1] == '\n') {
+		sendbuf[cur - 1] = 0;
+		cur = 0;	
+		flag = set_ready(flag);
+	  }
+	}
+
 	for (int i = 0; i < MAXN; i++) {
 	  int sfd = slist.sock_arr[i];
 	  if (sfd != 0) {
+
 	    if (FD_ISSET(sfd, &readfds)) {
 	      ssize_t rcvn = recv(sfd, buf, sizeof(buf), 0);
           if (rcvn == 0) {
@@ -120,20 +144,31 @@ int main() {
 			del_list(sfd, &slist);
 		  }
 		  else if (rcvn == -1) {
+			close(sfd);
 		    perror("Error");
 			del_list(sfd, &slist);
 		  }
 		  else {
 		    buf[rcvn] = 0;
-		    printf("->%s\n", buf);
-		    send(sfd, "ACK by server", sizeof("ACK by server") - 1, 0);
+		    printf("-->%s\n", buf);
 		  }
 		}
-		// if (FD_ISSET(sfd, &writefds)) {}
-		// if (FD_ISSET(sfd, &exceptfds)) {}
+
+		if (FD_ISSET(sfd, &writefds)) {
+		  if (is_ready(flag)) { 
+		    send(sfd, sendbuf, strlen(sendbuf), 0);
+			flag = set_sent(flag);
+		  }
+		}
+
+	    if (FD_ISSET(sfd, &exceptfds)) {
+		  printf("socket %d exception", sfd); 
+		  perror("");
+		  close(sfd);
+		}
       }
 	}
-
+	if (has_sent(flag)) flag = 0; 
   }
   close(slist.mainsock);
   return 0;
